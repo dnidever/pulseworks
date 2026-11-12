@@ -179,46 +179,55 @@ def phase_bin_rms(times, magnitudes, period, n_bins=30):
 
 
 if selected == activities[2]:
-    st.header('3. Refine the period using phase-folded light curves')
-    st.markdown('Compare two trial periods side by side. The better period should give a '
-                'tighter, more coherent folded light curve.')
-    if 'period_compare' not in st.session_state:
-        st.session_state.period_compare = 0.6347364
-    if st.button('Reset first trial period to periodogram maximum'):
+    st.header('3. Refine the period using the phase-folded light curve')
+    st.markdown('The same observations are shown over **two consecutive cycles (phase 0–2)** '
+                'so you can see how the light curve joins across phase 1.')
+    if st.button('Reset trial period to periodogram maximum'):
         st.session_state.period = round(best_default, 7)
-    col1, col2 = st.columns(2)
-    with col1:
-        trial = st.number_input('Trial period A (days)', min_value=.000001,
-                                max_value=1000.0, step=.0000001, format='%.7f', key='period')
-    with col2:
-        trial_b = st.number_input('Trial period B (days)', min_value=.000001,
-                                  max_value=1000.0, step=.0000001, format='%.7f',
-                                  key='period_compare')
+    trial = st.number_input('Trial period (days)', min_value=.000001,
+                            max_value=1000.0, step=.0000001,
+                            format='%.7f', key='period')
     n_bins = st.slider('Number of phase bins for RMS', min_value=10, max_value=100,
                        value=30, step=5)
     phase_offset_display = st.slider('Phase shift for display (cycles)', -1.0, 1.0,
                                      0.0, .01, key='phase_shift')
-    for column, period_value, label in [(col1, trial, 'A'), (col2, trial_b, 'B')]:
-        with column:
-            folded_phase = ((mjd - mjd.min()) / period_value + phase_offset_display) % 1
-            st.plotly_chart(lightcurve_figure(
-                folded_phase, mag, err, xlabel='Phase',
-                title=f'Period {label}: {period_value:.7f} days',
-                phase_mode=True, show_errors=show_errors), use_container_width=True)
-            rms, n_used, n_occupied = phase_bin_rms(mjd, mag, period_value, n_bins)
-            if np.isfinite(rms):
-                st.metric(f'Phase-bin RMS ({label})', f'{rms:.4f} mag')
-                st.caption(f'{n_used} observations in {n_occupied} bins with ≥2 points')
-            else:
-                st.warning('Not enough observations per phase bin to calculate RMS.')
-    st.caption('RMS is computed by dividing phase into equal-width bins, subtracting '
-               'the mean magnitude within each bin, and taking the root-mean-square '
-               'of the remaining residuals. Bins with fewer than two observations '
-               'are excluded. Lower RMS generally indicates a better period, but '
-               'the value also depends on the number of bins and measurement noise.')
-    st.info('**Try:** Compare periods of 0.6347000 and 0.6347364 days, as in the notebook. '
-            'Which gives the smaller RMS? Does that agree with what you see? '
-            'Try changing the number of bins.')
+    folded_phase = ((mjd - mjd.min()) / trial + phase_offset_display) % 1
+    # Repeat every observation at phase+1 to display two cycles.
+    display_phase = np.concatenate((folded_phase, folded_phase + 1))
+    display_mag = np.tile(mag, 2)
+    display_err = np.tile(err, 2)
+    display_mjd = np.tile(mjd, 2)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=display_phase, y=display_mag, mode='markers',
+        name='OGLE photometry', marker=dict(size=6, opacity=.72, color='#3278b7'),
+        customdata=np.column_stack((display_mjd, display_err)),
+        error_y=dict(type='data', array=display_err,
+                     visible=show_errors and valid_err, thickness=.8, width=0),
+        hovertemplate='Phase: %{x:.5f}<br>I magnitude: %{y:.3f}'
+                      '<br>MJD: %{customdata[0]:.5f}'
+                      '<br>I uncertainty: %{customdata[1]:.3f} mag<extra></extra>'))
+    fig.add_vline(x=1, line_dash='dot', line_color='gray', opacity=.4)
+    fig.update_layout(title=f'Folded light curve · P = {trial:.7f} days',
+                      xaxis_title='Phase (two cycles)', yaxis_title='I magnitude',
+                      height=500, hovermode='closest',
+                      margin=dict(l=35, r=20, t=55, b=45))
+    fig.update_xaxes(range=[0, 2], dtick=.25, showgrid=True)
+    fig.update_yaxes(autorange='reversed', showgrid=True)
+    st.plotly_chart(fig, use_container_width=True)
+    rms, n_used, n_occupied = phase_bin_rms(mjd, mag, trial, n_bins)
+    if np.isfinite(rms):
+        st.metric('Phase-bin RMS', f'{rms:.4f} mag')
+        st.caption(f'Calculated from one cycle: {n_used} observations in '
+                   f'{n_occupied} bins with at least two points.')
+    else:
+        st.warning('Not enough observations per phase bin to calculate RMS.')
+    st.caption('The RMS is calculated from the original observations folded into one '
+               'cycle, not from the duplicated points displayed in the plot. '
+               'It measures the scatter around each phase-bin mean magnitude; '
+               'lower values generally indicate a more coherent period.')
+    st.info('**Try:** Compare trial periods of 0.6347000 and 0.6347364 days. '
+            'Which gives the tighter light curve and smaller RMS?')
 
 if selected == activities[3]:
     st.header('4. Classify the light curve')
