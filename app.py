@@ -163,20 +163,62 @@ if selected == activities[1]:
                 st.metric('Highest-power period', f'{best_period:.7f} days')
             st.info('**Think:** Are all the peaks real pulsation periods? How might daily sampling produce aliases?')
 
+def phase_bin_rms(times, magnitudes, period, n_bins=30):
+    """RMS about the mean magnitude in each phase bin, pooling residuals."""
+    phases = ((times - times.min()) / period) % 1
+    bins = np.minimum((phases * n_bins).astype(int), n_bins - 1)
+    counts = np.bincount(bins, minlength=n_bins)
+    sums = np.bincount(bins, weights=magnitudes, minlength=n_bins)
+    means = np.divide(sums, counts, out=np.zeros(n_bins), where=counts > 0)
+    # Only bins containing at least two points constrain within-bin scatter.
+    used = counts[bins] >= 2
+    if not np.any(used):
+        return np.nan, 0, 0
+    residuals = magnitudes[used] - means[bins[used]]
+    return float(np.sqrt(np.mean(residuals**2))), int(used.sum()), int(np.sum(counts >= 2))
+
+
 if selected == activities[2]:
-    st.header('3. Refine the period using the phase-folded light curve')
-    if st.button('Reset trial period to periodogram maximum'):
+    st.header('3. Refine the period using phase-folded light curves')
+    st.markdown('Compare two trial periods side by side. The better period should give a '
+                'tighter, more coherent folded light curve.')
+    if 'period_compare' not in st.session_state:
+        st.session_state.period_compare = 0.6347364
+    if st.button('Reset first trial period to periodogram maximum'):
         st.session_state.period = round(best_default, 7)
-    trial = st.number_input('Trial period (days)', min_value=.000001, max_value=1000.0, step=.0000001,
-                            format='%.7f', key='period')
-    phase_offset_display = st.slider('Phase shift for display (cycles)', -1.0, 1.0, 0.0, .01, key='phase_shift')
-    phase = (mjd / trial + phase_offset_display) % 1
-    st.plotly_chart(lightcurve_figure(phase, mag, err, xlabel='Phase',
-                                    title=f'Folded light curve · P = {trial:.7f} days',
-                                    phase_mode=True, show_errors=show_errors),
-                    use_container_width=True)
-    st.caption('Hover for phase, MJD, magnitude, and uncertainty. Zoom to inspect the scatter.')
-    st.info('**Try:** Compare periods of 0.6347000 and 0.6347364 days, as in the notebook. Which produces a cleaner light curve? Why does such a small change matter over a long observing baseline?')
+    col1, col2 = st.columns(2)
+    with col1:
+        trial = st.number_input('Trial period A (days)', min_value=.000001,
+                                max_value=1000.0, step=.0000001, format='%.7f', key='period')
+    with col2:
+        trial_b = st.number_input('Trial period B (days)', min_value=.000001,
+                                  max_value=1000.0, step=.0000001, format='%.7f',
+                                  key='period_compare')
+    n_bins = st.slider('Number of phase bins for RMS', min_value=10, max_value=100,
+                       value=30, step=5)
+    phase_offset_display = st.slider('Phase shift for display (cycles)', -1.0, 1.0,
+                                     0.0, .01, key='phase_shift')
+    for column, period_value, label in [(col1, trial, 'A'), (col2, trial_b, 'B')]:
+        with column:
+            folded_phase = ((mjd - mjd.min()) / period_value + phase_offset_display) % 1
+            st.plotly_chart(lightcurve_figure(
+                folded_phase, mag, err, xlabel='Phase',
+                title=f'Period {label}: {period_value:.7f} days',
+                phase_mode=True, show_errors=show_errors), use_container_width=True)
+            rms, n_used, n_occupied = phase_bin_rms(mjd, mag, period_value, n_bins)
+            if np.isfinite(rms):
+                st.metric(f'Phase-bin RMS ({label})', f'{rms:.4f} mag')
+                st.caption(f'{n_used} observations in {n_occupied} bins with ≥2 points')
+            else:
+                st.warning('Not enough observations per phase bin to calculate RMS.')
+    st.caption('RMS is computed by dividing phase into equal-width bins, subtracting '
+               'the mean magnitude within each bin, and taking the root-mean-square '
+               'of the remaining residuals. Bins with fewer than two observations '
+               'are excluded. Lower RMS generally indicates a better period, but '
+               'the value also depends on the number of bins and measurement noise.')
+    st.info('**Try:** Compare periods of 0.6347000 and 0.6347364 days, as in the notebook. '
+            'Which gives the smaller RMS? Does that agree with what you see? '
+            'Try changing the number of bins.')
 
 if selected == activities[3]:
     st.header('4. Classify the light curve')
