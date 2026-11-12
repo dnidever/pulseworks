@@ -236,10 +236,9 @@ if selected == activities[2]:
 if selected == activities[3]:
     st.header('4. Classify the light curve')
     phase = (mjd / trial + st.session_state.get('phase_shift', 0.0)) % 1
-    st.markdown('The notebook uses Layden templates named **RRb** and **Cep**. Upload the original `layden.txt` to compare them with the data.')
-    template_upload = st.file_uploader('Layden template file (optional)', type=['txt','dat','csv'])
+    st.markdown('Compare the observed light curve with the bundled Layden templates. The notebook focuses on **RRb** and **Cep**, but all six template types are available.')
     template_path = HERE / 'layden.txt'
-    template_source = io.BytesIO(template_upload.getvalue()) if template_upload else (template_path if template_path.exists() else None)
+    template_source = template_path if template_path.exists() else None
     mean_i = float(np.mean(mag))
     observed_range = float(np.percentile(mag,95) - np.percentile(mag,5))
     st.write(f'Observed mean I magnitude: **{mean_i:.3f}**; approximate 5–95% magnitude range: **{observed_range:.3f} mag**.')
@@ -255,7 +254,7 @@ if selected == activities[3]:
                 templates.columns = ['phase','RRb','Cep']
             templates = templates.apply(pd.to_numeric, errors='coerce').dropna(subset=['phase','RRb','Cep'])
             if templates.empty: raise ValueError('No numeric template rows found.')
-            template_name = st.selectbox('Template', ['RRb','Cep'])
+            template_name = st.selectbox('Template', ['RRb', 'Cep', 'RRa', 'RRc', 'WUMa', 'Algol'])
             x,y,z = st.columns(3)
             with x: amp = st.slider('Template amplitude (mag)', .05, 2.5, max(.05,min(2.5,round(observed_range,2))), .01)
             with y: offset = st.slider('Template phase offset (cycles)', -1.0, 1.0, 0.0, .01)
@@ -275,7 +274,7 @@ if selected == activities[3]:
         except Exception as exc:
             st.warning(f'Could not parse template file: {exc}')
     else:
-        st.warning('Layden templates not provided. Template comparison is disabled; all other activities remain available.')
+        st.warning('Bundled Layden templates are missing from this deployment.')
     classification = st.radio('Your classification', ['RR Lyrae', 'Cepheid', 'Not sure yet'], horizontal=True, key='classification', index=None if False else 2)
     st.caption('Notebook guidance: RR Lyrae periods ~0.5–1 day, amplitudes ~0.4–1.2 mag; Cepheids periods ~3–100 days, amplitudes around 0.7 mag. Use both shape and period/amplitude.')
     st.text_area('Explain your classification using the observed period and light-curve shape:')
