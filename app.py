@@ -3,7 +3,7 @@ from pathlib import Path
 import io
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import streamlit as st
 from astropy.timeseries import LombScargle
 
@@ -81,18 +81,32 @@ with st.sidebar:
     selected = st.radio('Choose an activity', activities, label_visibility='collapsed')
     st.caption('Select a question to work on it. Your inputs are retained when switching activities.')
 
+def lightcurve_figure(x, y, errors, *, xlabel, title, phase_mode=False, show_errors=False):
+    """Interactive OGLE light curve with time, magnitude, and uncertainty on hover."""
+    custom = np.column_stack((mjd, errors))
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=y, mode='markers', name='OGLE photometry',
+        marker=dict(size=6, opacity=0.72, color='#3278b7'),
+        customdata=custom,
+        error_y=dict(type='data', array=errors, visible=show_errors and valid_err,
+                     thickness=0.8, width=0),
+        hovertemplate=(('Phase: %{x:.5f}<br>' if phase_mode else 'MJD: %{x:.5f}<br>')
+                       + 'I magnitude: %{y:.3f}<br>MJD: %{customdata[0]:.5f}'
+                       + '<br>I uncertainty: %{customdata[1]:.3f} mag<extra></extra>'),
+    ))
+    fig.update_layout(title=title, xaxis_title=xlabel, yaxis_title='I magnitude',
+                      height=480, hovermode='closest', margin=dict(l=35,r=20,t=55,b=45))
+    fig.update_yaxes(autorange='reversed', showgrid=True)
+    fig.update_xaxes(showgrid=True, range=[0, 1] if phase_mode else None)
+    return fig
+
 if selected == activities[0]:
     st.header('1. Plot the observed light curve')
-    fig, ax = plt.subplots(figsize=(9,3.6))
-    if show_errors and valid_err:
-        ax.errorbar(mjd, mag, yerr=err, fmt='.', ms=4, alpha=.75, lw=.6)
-    else:
-        ax.scatter(mjd, mag, s=13, alpha=.75)
-    ax.set(xlabel='MJD (days)', ylabel='I magnitude', title='OGLE light curve')
-    ax.invert_yaxis()
-    ax.grid(alpha=.2)
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(lightcurve_figure(mjd, mag, err, xlabel='MJD (days)',
+                                    title='OGLE light curve', show_errors=show_errors),
+                    use_container_width=True)
+    st.caption('Hover over a point for its MJD, magnitude, and uncertainty. Drag to zoom; double-click to reset.')
     st.info('**Think:** Why is it difficult to estimate the pulsation period directly from this plot?')
 
 if selected == activities[1]:
@@ -110,18 +124,22 @@ if selected == activities[1]:
     peak = int(np.argmax(power))
     best_period = float(1 / freq[peak])
     max_period_display = st.slider('Show periods up to (days)', .5, 20.0, 4.0, .5)
-    order = np.argsort(1/freq)
-    periods = 1/freq
-    fig, ax = plt.subplots(figsize=(9,3.6))
+    periods = 1 / freq
     mask = periods <= max_period_display
-    ax.plot(periods[order][np.isin(order, np.flatnonzero(mask))], power[order][np.isin(order, np.flatnonzero(mask))], lw=1)
+    idx = np.argsort(periods[mask])
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=periods[mask][idx], y=power[mask][idx],
+                             mode='lines', name='Lomb–Scargle power',
+                             line=dict(color='#3278b7', width=1.5),
+                             hovertemplate='Period: %{x:.7f} d<br>Power: %{y:.5f}<extra></extra>'))
     if best_period <= max_period_display:
-        ax.axvline(best_period, ls='--', color='tab:red', label=f'Peak: {best_period:.7f} d')
-        ax.legend()
-    ax.set(xlabel='Period (days)', ylabel='Lomb–Scargle power', title='Periodogram')
-    ax.grid(alpha=.2)
-    st.pyplot(fig)
-    plt.close(fig)
+        fig.add_vline(x=best_period, line_dash='dash', line_color='#d45543',
+                      annotation_text=f'Peak: {best_period:.7f} d')
+    fig.update_layout(title='Periodogram', xaxis_title='Period (days)',
+                      yaxis_title='Lomb–Scargle power', height=480,
+                      hovermode='closest', margin=dict(l=35,r=20,t=55,b=45))
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption('Hover to read a candidate period and its power; drag to zoom in on narrow peaks.')
     st.metric('Highest-power period', f'{best_period:.7f} days')
     st.info('**Think:** Are all the peaks real pulsation periods? How might daily sampling produce aliases?')
 
@@ -133,16 +151,11 @@ if selected == activities[2]:
                             format='%.7f', key='period')
     phase_offset_display = st.slider('Phase shift for display (cycles)', -1.0, 1.0, 0.0, .01, key='phase_shift')
     phase = (mjd / trial + phase_offset_display) % 1
-    fig, ax = plt.subplots(figsize=(9,3.7))
-    if show_errors and valid_err:
-        ax.errorbar(phase, mag, yerr=err, fmt='.', ms=4, alpha=.65, lw=.5)
-    else:
-        ax.scatter(phase, mag, s=14, alpha=.7)
-    ax.set(xlabel='Phase', ylabel='I magnitude', title=f'Folded light curve · P = {trial:.7f} days', xlim=(0,1))
-    ax.invert_yaxis()
-    ax.grid(alpha=.2)
-    st.pyplot(fig)
-    plt.close(fig)
+    st.plotly_chart(lightcurve_figure(phase, mag, err, xlabel='Phase',
+                                    title=f'Folded light curve · P = {trial:.7f} days',
+                                    phase_mode=True, show_errors=show_errors),
+                    use_container_width=True)
+    st.caption('Hover for phase, MJD, magnitude, and uncertainty. Zoom to inspect the scatter.')
     st.info('**Try:** Compare periods of 0.6347000 and 0.6347364 days, as in the notebook. Which produces a cleaner light curve? Why does such a small change matter over a long observing baseline?')
 
 if selected == activities[3]:
@@ -172,16 +185,18 @@ if selected == activities[3]:
             with x: amp = st.slider('Template amplitude (mag)', .05, 2.5, max(.05,min(2.5,round(observed_range,2))), .01)
             with y: offset = st.slider('Template phase offset (cycles)', -1.0, 1.0, 0.0, .01)
             with z: base = st.number_input('Template magnitude offset', value=round(mean_i,3), step=.01, format='%.3f')
-            fig, ax = plt.subplots(figsize=(9,3.7))
-            ax.scatter(phase,mag,s=12,alpha=.55,label='OGLE photometry')
-            template_phase = (templates['phase'].to_numpy()+offset)%1
-            template_mag = amp*templates[template_name].to_numpy()+base
-            # Repeat at phase boundaries for continuity.
+            fig = lightcurve_figure(phase, mag, err, xlabel='Phase',
+                                    title='Observed light curve and template',
+                                    phase_mode=True, show_errors=show_errors)
+            template_phase = (templates['phase'].to_numpy() + offset) % 1
+            template_mag = amp * templates[template_name].to_numpy() + base
             idx = np.argsort(template_phase)
-            ax.plot(template_phase[idx],template_mag[idx],color='tab:red',lw=2,label=template_name)
-            ax.set(xlabel='Phase',ylabel='I magnitude',xlim=(0,1))
-            ax.invert_yaxis();ax.legend();ax.grid(alpha=.2)
-            st.pyplot(fig);plt.close(fig)
+            fig.add_trace(go.Scatter(x=template_phase[idx], y=template_mag[idx],
+                                     mode='lines', name=f'{template_name} template',
+                                     line=dict(color='#d45543', width=2.5),
+                                     hovertemplate='Template phase: %{x:.5f}<br>'
+                                                   'I magnitude: %{y:.3f}<extra></extra>'))
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as exc:
             st.warning(f'Could not parse template file: {exc}')
     else:
