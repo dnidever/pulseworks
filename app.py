@@ -185,14 +185,14 @@ if selected == activities[2]:
     # Narrow refinement window around the initial periodogram estimate.
     # Small steps let students tune the folded light curve without large jumps.
     center = best_default
-    period_min = max(0.00001, round(center - 0.001, 7))
-    period_max = round(center + 0.001, 7)
+    period_min = max(0.00001, round(center - 0.0002, 7))
+    period_max = round(center + 0.0002, 7)
     if not period_min <= st.session_state.period <= period_max:
         st.session_state.period = round(center, 7)
     if st.button('Reset trial period to periodogram maximum'):
         st.session_state.period = round(center, 7)
     trial = st.slider('Trial period (days)', min_value=period_min,
-                      max_value=period_max, step=0.000001,
+                      max_value=period_max, step=0.0000002,
                       format='%.7f', key='period')
     n_bins = 30  # Fixed phase-bin resolution for a consistent RMS comparison.
     folded_phase = ((mjd - mjd.min()) / trial) % 1
