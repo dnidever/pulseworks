@@ -370,18 +370,44 @@ if selected == activities[5]:
 
 if selected == activities[6]:
     st.header('7. Calculate the distance')
+    st.markdown('Enter the apparent and absolute V magnitudes from Activities 6 and 5, '
+                'then use the distance modulus to determine the distance.')
     st.latex(r'\mu = m_V - M_V = 5\log_{10}(d/\mathrm{pc})-5')
     relation = st.session_state.get('relation', 'RR Lyrae')
     distance_period = st.session_state.get('absolute_period', 0.6347364)
-    Mv = (1.55 - 1.03*np.log10(distance_period)) if relation == 'RR Lyrae' else (-2.81*np.log10(distance_period)-1.43)
-    st.caption(f'Using period P = {distance_period:.7f} days from Activity 5.')
-    mu = vmag - Mv
+    suggested_mv = ((1.55 - 1.03*np.log10(distance_period))
+                    if relation == 'RR Lyrae'
+                    else (-2.81*np.log10(distance_period)-1.43))
+    suggested_v = mean_i + st.session_state.get('vi', .683)
+    # Keep students' entered values independent of the suggestions, so editing
+    # either input doesn't get overwritten by an unrelated Streamlit rerun.
+    if 'distance_apparent_v' not in st.session_state:
+        st.session_state.distance_apparent_v = float(round(suggested_v, 3))
+    if 'distance_absolute_v' not in st.session_state:
+        st.session_state.distance_absolute_v = float(round(suggested_mv, 3))
+    a, b = st.columns(2)
+    with a:
+        entered_v = st.number_input('Apparent V magnitude, m_V (mag)',
+                                    step=0.001, format='%.3f',
+                                    key='distance_apparent_v')
+        st.caption(f'From Activity 6: {suggested_v:.3f} mag')
+    with b:
+        entered_mv = st.number_input('Absolute V magnitude, M_V (mag)',
+                                     step=0.001, format='%.3f',
+                                     key='distance_absolute_v')
+        st.caption(f'From Activity 5 ({relation}, P = {distance_period:.7f} d): '
+                   f'{suggested_mv:.3f} mag')
+    mu = entered_v - entered_mv
     dist_pc = 10**(mu/5+1)
-    a,b = st.columns(2)
-    a.metric('Distance modulus',f'{mu:.3f} mag')
-    b.metric('Distance',f'{dist_pc/1000:.2f} kpc')
-    st.caption('As in the notebook, this calculation does not include an extinction correction. The provided relations are reproduced from the assignment.')
-    st.info('**Reflect:** How would dust extinction affect the inferred distance? Which measurements contribute uncertainty?')
+    st.latex(r'd = 10^{(\mu+5)/5}\;\mathrm{pc}')
+    left, right = st.columns(2)
+    left.metric('Distance modulus', f'{mu:.3f} mag')
+    right.metric('Distance', f'{dist_pc/1000:.2f} kpc')
+    st.caption('The input fields are initialized from the preceding activities '
+               'when you first visit this page, but you can change them independently. '
+               'This calculation does not include an extinction correction.')
+    st.info('**Reflect:** How does changing either magnitude affect the inferred '
+            'distance? How would dust extinction affect your result?')
 
 with st.expander('Instructor / student notes'):
     st.markdown('''- Periods in the periodogram are computed as **1/frequency**. The highest-power peak is a starting point, not automatically the true period.
