@@ -182,16 +182,21 @@ if selected == activities[2]:
     st.header('3. Refine the period using the phase-folded light curve')
     st.markdown('The same observations are shown over **two consecutive cycles (phase 0–2)** '
                 'so you can see how the light curve joins across phase 1.')
+    # A useful search window around the initial periodogram estimate.
+    # A 1e-5 day slider step changes the folded light curve visibly over
+    # the long OGLE time baseline without making the control too sensitive.
+    center = best_default
+    period_min = max(0.00001, round(center - 0.01, 7))
+    period_max = round(center + 0.01, 7)
+    if not period_min <= st.session_state.period <= period_max:
+        st.session_state.period = round(center, 7)
     if st.button('Reset trial period to periodogram maximum'):
-        st.session_state.period = round(best_default, 7)
-    trial = st.number_input('Trial period (days)', min_value=.000001,
-                            max_value=1000.0, step=.0000001,
-                            format='%.7f', key='period')
-    n_bins = st.slider('Number of phase bins for RMS', min_value=10, max_value=100,
-                       value=30, step=5)
-    phase_offset_display = st.slider('Phase shift for display (cycles)', -1.0, 1.0,
-                                     0.0, .01, key='phase_shift')
-    folded_phase = ((mjd - mjd.min()) / trial + phase_offset_display) % 1
+        st.session_state.period = round(center, 7)
+    trial = st.slider('Trial period (days)', min_value=period_min,
+                      max_value=period_max, step=0.00001,
+                      format='%.7f', key='period')
+    n_bins = 30  # Fixed phase-bin resolution for a consistent RMS comparison.
+    folded_phase = ((mjd - mjd.min()) / trial) % 1
     # Repeat every observation at phase+1 to display two cycles.
     display_phase = np.concatenate((folded_phase, folded_phase + 1))
     display_mag = np.tile(mag, 2)
