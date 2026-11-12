@@ -111,37 +111,57 @@ if selected == activities[0]:
 
 if selected == activities[1]:
     st.header('2. Create a Lomb–Scargle periodogram')
+    st.markdown('Choose the frequency range and sampling, then press **Calculate periodogram**.')
     a,b,c = st.columns(3)
     with a: fmin = st.number_input('Minimum frequency (cycles/day)', min_value=.001, max_value=9.0, value=.01, format='%.3f')
     with b: fmax = st.number_input('Maximum frequency (cycles/day)', min_value=.01, max_value=30.0, value=10.0, format='%.2f')
     with c: spp = st.slider('Samples per peak', 3, 20, 10)
-    if fmin >= fmax:
-        st.error('Maximum frequency must exceed minimum frequency.')
-        st.stop()
     weighted = st.checkbox('Use measurement uncertainties in periodogram', value=False, disabled=not valid_err,
                            help='The notebook uses an unweighted Lomb–Scargle periodogram by default.')
-    freq, power = periodogram(tuple(mjd), tuple(mag), fmin, fmax, spp, weighted, tuple(err) if weighted else ())
-    peak = int(np.argmax(power))
-    best_period = float(1 / freq[peak])
     max_period_display = st.slider('Show periods up to (days)', .5, 20.0, 4.0, .5)
-    periods = 1 / freq
-    mask = periods <= max_period_display
-    idx = np.argsort(periods[mask])
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=periods[mask][idx], y=power[mask][idx],
-                             mode='lines', name='Lomb–Scargle power',
-                             line=dict(color='#3278b7', width=1.5),
-                             hovertemplate='Period: %{x:.7f} d<br>Power: %{y:.5f}<extra></extra>'))
-    if best_period <= max_period_display:
-        fig.add_vline(x=best_period, line_dash='dash', line_color='#d45543',
-                      annotation_text=f'Peak: {best_period:.7f} d')
-    fig.update_layout(title='Periodogram', xaxis_title='Period (days)',
-                      yaxis_title='Lomb–Scargle power', height=480,
-                      hovermode='closest', margin=dict(l=35,r=20,t=55,b=45))
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption('Hover to read a candidate period and its power; drag to zoom in on narrow peaks.')
-    st.metric('Highest-power period', f'{best_period:.7f} days')
-    st.info('**Think:** Are all the peaks real pulsation periods? How might daily sampling produce aliases?')
+    # Keep the plotted result fixed until students explicitly recalculate.
+    settings = (fmin, fmax, spp, weighted, upload.getvalue() if upload else None)
+    if fmin >= fmax:
+        st.error('Maximum frequency must exceed minimum frequency.')
+    else:
+        if st.button('Calculate periodogram', type='primary'):
+            freq, power = periodogram(tuple(mjd), tuple(mag), fmin, fmax, spp,
+                                      weighted, tuple(err) if weighted else ())
+            st.session_state['periodogram_result'] = (freq, power)
+            st.session_state['periodogram_settings'] = settings
+            st.session_state['show_periodogram_peak'] = False
+
+        if 'periodogram_result' not in st.session_state:
+            st.info('Press **Calculate periodogram** to generate the plot.')
+        else:
+            freq, power = st.session_state['periodogram_result']
+            peak = int(np.argmax(power))
+            best_period = float(1 / freq[peak])
+            if st.session_state.get('periodogram_settings') != settings:
+                st.warning('The calculation settings have changed. Press **Calculate periodogram** to update the plot.')
+            periods = 1 / freq
+            mask = periods <= max_period_display
+            idx = np.argsort(periods[mask])
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=periods[mask][idx], y=power[mask][idx],
+                mode='lines', name='Lomb–Scargle power',
+                line=dict(color='#3278b7', width=1.5),
+                hovertemplate='Period: %{x:.7f} d<br>Power: %{y:.5f}<extra></extra>'))
+            if st.session_state.get('show_periodogram_peak', False) and best_period <= max_period_display:
+                fig.add_vline(x=best_period, line_dash='dash', line_color='#d45543',
+                              annotation_text=f'Peak: {best_period:.7f} d')
+            fig.update_layout(title='Periodogram', xaxis_title='Period (days)',
+                              yaxis_title='Lomb–Scargle power', height=480,
+                              hovermode='closest', margin=dict(l=35,r=20,t=55,b=45))
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption('Hover to read a candidate period and its power; drag to zoom in on narrow peaks.')
+            if st.button('Hide peak' if st.session_state.get('show_periodogram_peak', False) else 'Reveal highest peak'):
+                st.session_state['show_periodogram_peak'] = not st.session_state.get('show_periodogram_peak', False)
+                st.rerun()
+            if st.session_state.get('show_periodogram_peak', False):
+                st.metric('Highest-power period', f'{best_period:.7f} days')
+            st.info('**Think:** Are all the peaks real pulsation periods? How might daily sampling produce aliases?')
 
 if selected == activities[2]:
     st.header('3. Refine the period using the phase-folded light curve')
