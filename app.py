@@ -323,6 +323,7 @@ if selected == activities[4]:
     st.metric('Absolute V magnitude', f'{Mv:.3f} mag')
     rr_periods = np.logspace(np.log10(0.2), np.log10(2), 250)
     cep_periods = np.logspace(np.log10(1), np.log10(100), 250)
+    cep_extrapolated = np.logspace(np.log10(0.2), np.log10(1), 120)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=rr_periods, y=rr_mv(rr_periods), mode='lines',
                              name='RR Lyrae relation', line=dict(color='#3278b7', width=3),
@@ -330,11 +331,14 @@ if selected == activities[4]:
     fig.add_trace(go.Scatter(x=cep_periods, y=cep_mv(cep_periods), mode='lines',
                              name='Cepheid relation', line=dict(color='#d45543', width=3),
                              hovertemplate='P: %{x:.4f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
-    fig.add_trace(go.Scatter(x=[period_for_mv], y=[Mv], mode='markers',
-                             name=f'Selected {relation} value',
-                             marker=dict(size=13, symbol='star', color='#2a9d8f',
-                                         line=dict(color='black', width=1)),
-                             hovertemplate='Selected P: %{x:.7f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
+    fig.add_trace(go.Scatter(x=cep_extrapolated, y=cep_mv(cep_extrapolated),
+                             mode='lines', name='Cepheid extrapolation',
+                             line=dict(color='#d45543', width=2.5, dash='dash'),
+                             hovertemplate='Extrapolated P: %{x:.4f} d<br>'
+                                           'M_V: %{y:.3f} mag<extra></extra>'))
+    fig.add_vline(x=period_for_mv, line_dash='dash', line_color='#2a9d8f',
+                  line_width=2, annotation_text=f'P = {period_for_mv:.7f} d',
+                  annotation_position='top right')
     fig.update_layout(title='Absolute V magnitude versus period',
                       xaxis_title='Period (days; logarithmic scale)',
                       yaxis_title='Absolute V magnitude',
@@ -343,9 +347,10 @@ if selected == activities[4]:
     fig.update_xaxes(type='log', range=[np.log10(0.2), np.log10(100)])
     fig.update_yaxes(autorange='reversed', showgrid=True)
     st.plotly_chart(fig, use_container_width=True)
-    st.caption('The star marks the selected period and relation. Smaller (more negative) '
-               'absolute magnitudes correspond to brighter stars. The two curves are '
-               'shown over representative period ranges; the equations come from the lab.')
+    st.caption('The vertical line marks the entered period. The dashed red curve '
+               'extrapolates the Cepheid relation below 1 day, outside its usual '
+               'application range; it is shown for comparison, not as a physically '
+               'validated prediction. More negative absolute magnitudes mean brighter stars.')
 
 if selected == activities[5]:
     st.header('6. Determine mean apparent V magnitude')
