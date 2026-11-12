@@ -305,9 +305,47 @@ if selected == activities[4]:
     st.header('5. Calculate absolute magnitude from the period–luminosity relation')
     st.latex(r'M_V(\mathrm{RR\ Lyrae}) = 1.55 - 1.03\log_{10}(P)')
     st.latex(r'M_V(\mathrm{Cepheid}) = -2.81\log_{10}(P) - 1.43')
-    relation = st.selectbox('Use relation for', ['RR Lyrae','Cepheid'], index=0 if classification!='Cepheid' else 1, key='relation')
-    Mv = (1.55-1.03*np.log10(trial)) if relation=='RR Lyrae' else (-2.81*np.log10(trial)-1.43)
-    st.metric('Absolute V magnitude',f'{Mv:.3f} mag')
+    if 'absolute_period' not in st.session_state:
+        st.session_state.absolute_period = 0.6347364
+    if 'absolute_period_input' not in st.session_state:
+        st.session_state.absolute_period_input = st.session_state.absolute_period
+    def store_absolute_period():
+        st.session_state.absolute_period = st.session_state.absolute_period_input
+    period_for_mv = st.number_input(
+        'Period used for absolute magnitude (days)', min_value=0.000001,
+        max_value=1000.0, step=0.000001, format='%.7f',
+        key='absolute_period_input', on_change=store_absolute_period)
+    relation = st.selectbox('Use relation for', ['RR Lyrae','Cepheid'],
+                            index=0 if classification!='Cepheid' else 1, key='relation')
+    rr_mv = lambda p: 1.55 - 1.03 * np.log10(p)
+    cep_mv = lambda p: -2.81 * np.log10(p) - 1.43
+    Mv = float(rr_mv(period_for_mv) if relation == 'RR Lyrae' else cep_mv(period_for_mv))
+    st.metric('Absolute V magnitude', f'{Mv:.3f} mag')
+    rr_periods = np.logspace(np.log10(0.2), np.log10(2), 250)
+    cep_periods = np.logspace(np.log10(1), np.log10(100), 250)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=rr_periods, y=rr_mv(rr_periods), mode='lines',
+                             name='RR Lyrae relation', line=dict(color='#3278b7', width=3),
+                             hovertemplate='P: %{x:.4f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
+    fig.add_trace(go.Scatter(x=cep_periods, y=cep_mv(cep_periods), mode='lines',
+                             name='Cepheid relation', line=dict(color='#d45543', width=3),
+                             hovertemplate='P: %{x:.4f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
+    fig.add_trace(go.Scatter(x=[period_for_mv], y=[Mv], mode='markers',
+                             name=f'Selected {relation} value',
+                             marker=dict(size=13, symbol='star', color='#2a9d8f',
+                                         line=dict(color='black', width=1)),
+                             hovertemplate='Selected P: %{x:.7f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
+    fig.update_layout(title='Absolute V magnitude versus period',
+                      xaxis_title='Period (days; logarithmic scale)',
+                      yaxis_title='Absolute V magnitude',
+                      height=500, hovermode='closest',
+                      margin=dict(l=40, r=20, t=55, b=45))
+    fig.update_xaxes(type='log', range=[np.log10(0.2), np.log10(100)])
+    fig.update_yaxes(autorange='reversed', showgrid=True)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption('The star marks the selected period and relation. Smaller (more negative) '
+               'absolute magnitudes correspond to brighter stars. The two curves are '
+               'shown over representative period ranges; the equations come from the lab.')
 
 if selected == activities[5]:
     st.header('6. Determine mean apparent V magnitude')
@@ -322,7 +360,9 @@ if selected == activities[6]:
     st.header('7. Calculate the distance')
     st.latex(r'\mu = m_V - M_V = 5\log_{10}(d/\mathrm{pc})-5')
     relation = st.session_state.get('relation', 'RR Lyrae')
-    Mv = (1.55 - 1.03*np.log10(trial)) if relation == 'RR Lyrae' else (-2.81*np.log10(trial)-1.43)
+    distance_period = st.session_state.get('absolute_period', 0.6347364)
+    Mv = (1.55 - 1.03*np.log10(distance_period)) if relation == 'RR Lyrae' else (-2.81*np.log10(distance_period)-1.43)
+    st.caption(f'Using period P = {distance_period:.7f} days from Activity 5.')
     mu = vmag - Mv
     dist_pc = 10**(mu/5+1)
     a,b = st.columns(2)
