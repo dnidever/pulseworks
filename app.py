@@ -235,7 +235,7 @@ if selected == activities[2]:
 
 if selected == activities[3]:
     st.header('4. Classify the light curve')
-    phase = (mjd / trial + st.session_state.get('phase_shift', 0.0)) % 1
+    phase = (mjd / trial) % 1
     st.markdown('Compare the observed light curve with the bundled Layden templates. The notebook focuses on **RRb** and **Cep**, but all six template types are available.')
     template_path = HERE / 'layden.txt'
     template_source = template_path if template_path.exists() else None
@@ -271,6 +271,28 @@ if selected == activities[3]:
                                      hovertemplate='Template phase: %{x:.5f}<br>'
                                                    'I magnitude: %{y:.3f}<extra></extra>'))
             st.plotly_chart(fig, use_container_width=True)
+
+            # Interpolate the displayed, phase-shifted template at each observed
+            # phase. np.interp(period=1) handles the wrap at phase 0/1.
+            # Evaluate the template before applying amplitude and magnitude offset,
+            # so the residuals correspond exactly to the plotted model.
+            raw_phase = templates['phase'].to_numpy(dtype=float)
+            raw_shape = templates[template_name].to_numpy(dtype=float)
+            good = np.isfinite(raw_phase) & np.isfinite(raw_shape)
+            raw_phase, raw_shape = raw_phase[good], raw_shape[good]
+            if len(raw_phase) < 2:
+                st.warning('Not enough template points to calculate residual RMS.')
+            else:
+                shifted_phase = (raw_phase + offset) % 1
+                model_shape = np.interp(phase, shifted_phase, raw_shape, period=1)
+                predicted_mag = amp * model_shape + base
+                residuals = mag - predicted_mag
+                residual_rms = float(np.sqrt(np.mean(residuals**2)))
+                st.metric('Template residual RMS', f'{residual_rms:.4f} mag')
+                st.caption('RMS of observed I magnitudes minus the selected template, '
+                           'interpolated at each observation phase. Lower is better; '
+                           'this is the RMS for your current settings, not an '
+                           'automatically optimized fit.')
         except Exception as exc:
             st.warning(f'Could not parse template file: {exc}')
     else:
