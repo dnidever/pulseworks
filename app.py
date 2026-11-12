@@ -339,6 +339,12 @@ if selected == activities[4]:
     fig.add_vline(x=period_for_mv, line_dash='dash', line_color='#2a9d8f',
                   line_width=2, annotation_text=f'P = {period_for_mv:.7f} d',
                   annotation_position='top right')
+    fig.add_trace(go.Scatter(
+        x=[period_for_mv], y=[Mv], mode='markers',
+        name=f'Selected {relation} value',
+        marker=dict(size=14, symbol='star', color='#2a9d8f',
+                    line=dict(color='black', width=1)),
+        hovertemplate='Selected P: %{x:.7f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
     fig.update_layout(title='Absolute V magnitude versus period',
                       xaxis_title='Period (days; logarithmic scale)',
                       yaxis_title='Absolute V magnitude',
@@ -347,7 +353,8 @@ if selected == activities[4]:
     fig.update_xaxes(type='log', range=[np.log10(0.2), np.log10(100)])
     fig.update_yaxes(autorange='reversed', showgrid=True)
     st.plotly_chart(fig, use_container_width=True)
-    st.caption('The vertical line marks the entered period. The dashed red curve '
+    st.caption('The vertical line marks the entered period, and the star marks the '
+               'absolute magnitude from the selected relation. The dashed red curve '
                'extrapolates the Cepheid relation below 1 day, outside its usual '
                'application range; it is shown for comparison, not as a physically '
                'validated prediction. More negative absolute magnitudes mean brighter stars.')
