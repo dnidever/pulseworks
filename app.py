@@ -305,22 +305,33 @@ if selected == activities[4]:
     st.header('5. Calculate absolute magnitude from the period–luminosity relation')
     st.latex(r'M_V(\mathrm{RR\ Lyrae}) = 1.55 - 1.03\log_{10}(P)')
     st.latex(r'M_V(\mathrm{Cepheid}) = -2.81\log_{10}(P) - 1.43')
-    if 'absolute_period' not in st.session_state:
-        st.session_state.absolute_period = 0.6347364
-    if 'absolute_period_input' not in st.session_state:
-        st.session_state.absolute_period_input = st.session_state.absolute_period
-    def store_absolute_period():
-        st.session_state.absolute_period = st.session_state.absolute_period_input
-    period_for_mv = st.number_input(
-        'Period used for absolute magnitude (days)', min_value=0.000001,
-        max_value=1000.0, step=0.000001, format='%.7f',
-        key='absolute_period_input', on_change=store_absolute_period)
-    relation = st.selectbox('Use relation for', ['RR Lyrae','Cepheid'],
-                            index=0 if classification!='Cepheid' else 1, key='relation')
+    if 'absolute_period_text' not in st.session_state:
+        st.session_state.absolute_period_text = ''
+    period_text = st.text_input('Period used for absolute magnitude (days)',
+                                key='absolute_period_text', placeholder='Enter period in days')
+    relation = st.selectbox('Use relation for', ['RR Lyrae', 'Cepheid'],
+                            index=0 if classification != 'Cepheid' else 1,
+                            key='relation')
     rr_mv = lambda p: 1.55 - 1.03 * np.log10(p)
     cep_mv = lambda p: -2.81 * np.log10(p) - 1.43
-    Mv = float(rr_mv(period_for_mv) if relation == 'RR Lyrae' else cep_mv(period_for_mv))
-    st.metric('Absolute V magnitude', f'{Mv:.3f} mag')
+    try:
+        period_for_mv = float(period_text.strip())
+        if not np.isfinite(period_for_mv) or period_for_mv <= 0:
+            raise ValueError()
+    except ValueError:
+        period_for_mv = None
+        if period_text.strip():
+            st.warning('Enter a positive numerical period in days.')
+        else:
+            st.info('Enter your measured period to calculate the absolute magnitude.')
+    if period_for_mv is not None:
+        st.session_state.absolute_period = period_for_mv
+        Mv = float(rr_mv(period_for_mv) if relation == 'RR Lyrae'
+                   else cep_mv(period_for_mv))
+        st.metric('Absolute V magnitude', f'{Mv:.3f} mag')
+    else:
+        st.session_state.absolute_period = None
+
     rr_periods = np.logspace(np.log10(0.2), np.log10(2), 250)
     cep_periods = np.logspace(np.log10(1), np.log10(100), 250)
     cep_extrapolated = np.logspace(np.log10(0.2), np.log10(1), 120)
@@ -336,15 +347,16 @@ if selected == activities[4]:
                              line=dict(color='#d45543', width=2.5, dash='dash'),
                              hovertemplate='Extrapolated P: %{x:.4f} d<br>'
                                            'M_V: %{y:.3f} mag<extra></extra>'))
-    fig.add_vline(x=period_for_mv, line_dash='dash', line_color='#2a9d8f',
-                  line_width=2, annotation_text=f'P = {period_for_mv:.7f} d',
-                  annotation_position='top right')
-    fig.add_trace(go.Scatter(
-        x=[period_for_mv], y=[Mv], mode='markers',
-        name=f'Selected {relation} value',
-        marker=dict(size=14, symbol='star', color='#2a9d8f',
-                    line=dict(color='black', width=1)),
-        hovertemplate='Selected P: %{x:.7f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
+    if period_for_mv is not None:
+        fig.add_vline(x=period_for_mv, line_dash='dash', line_color='#2a9d8f',
+                      line_width=2, annotation_text=f'P = {period_for_mv:.7f} d',
+                      annotation_position='top right')
+        fig.add_trace(go.Scatter(
+            x=[period_for_mv], y=[Mv], mode='markers',
+            name=f'Selected {relation} value',
+            marker=dict(size=14, symbol='star', color='#2a9d8f',
+                        line=dict(color='black', width=1)),
+            hovertemplate='Selected P: %{x:.7f} d<br>M_V: %{y:.3f} mag<extra></extra>'))
     fig.update_layout(title='Absolute V magnitude versus period',
                       xaxis_title='Period (days; logarithmic scale)',
                       yaxis_title='Absolute V magnitude',
@@ -370,42 +382,37 @@ if selected == activities[5]:
 
 if selected == activities[6]:
     st.header('7. Calculate the distance')
-    st.markdown('Enter the apparent and absolute V magnitudes from Activities 6 and 5, '
-                'then use the distance modulus to determine the distance.')
+    st.markdown('Enter the apparent and absolute V magnitudes you found in '
+                'Activities 6 and 5.')
     st.latex(r'\mu = m_V - M_V = 5\log_{10}(d/\mathrm{pc})-5')
-    relation = st.session_state.get('relation', 'RR Lyrae')
-    distance_period = st.session_state.get('absolute_period', 0.6347364)
-    suggested_mv = ((1.55 - 1.03*np.log10(distance_period))
-                    if relation == 'RR Lyrae'
-                    else (-2.81*np.log10(distance_period)-1.43))
-    suggested_v = mean_i + st.session_state.get('vi', .683)
-    # Keep students' entered values independent of the suggestions, so editing
-    # either input doesn't get overwritten by an unrelated Streamlit rerun.
-    if 'distance_apparent_v' not in st.session_state:
-        st.session_state.distance_apparent_v = float(round(suggested_v, 3))
-    if 'distance_absolute_v' not in st.session_state:
-        st.session_state.distance_absolute_v = float(round(suggested_mv, 3))
-    a, b = st.columns(2)
-    with a:
-        entered_v = st.number_input('Apparent V magnitude, m_V (mag)',
-                                    step=0.001, format='%.3f',
-                                    key='distance_apparent_v')
-        st.caption(f'From Activity 6: {suggested_v:.3f} mag')
-    with b:
-        entered_mv = st.number_input('Absolute V magnitude, M_V (mag)',
-                                     step=0.001, format='%.3f',
-                                     key='distance_absolute_v')
-        st.caption(f'From Activity 5 ({relation}, P = {distance_period:.7f} d): '
-                   f'{suggested_mv:.3f} mag')
-    mu = entered_v - entered_mv
-    dist_pc = 10**(mu/5+1)
-    st.latex(r'd = 10^{(\mu+5)/5}\;\mathrm{pc}')
-    left, right = st.columns(2)
-    left.metric('Distance modulus', f'{mu:.3f} mag')
-    right.metric('Distance', f'{dist_pc/1000:.2f} kpc')
-    st.caption('The input fields are initialized from the preceding activities '
-               'when you first visit this page, but you can change them independently. '
-               'This calculation does not include an extinction correction.')
+    if 'distance_apparent_text' not in st.session_state:
+        st.session_state.distance_apparent_text = ''
+    if 'distance_absolute_text' not in st.session_state:
+        st.session_state.distance_absolute_text = ''
+    apparent_text = st.text_input('Apparent V magnitude, m_V (mag)',
+                                  key='distance_apparent_text',
+                                  placeholder='Enter apparent V magnitude')
+    absolute_text = st.text_input('Absolute V magnitude, M_V (mag)',
+                                  key='distance_absolute_text',
+                                  placeholder='Enter absolute V magnitude')
+    try:
+        entered_v = float(apparent_text.strip())
+        entered_mv = float(absolute_text.strip())
+        if not (np.isfinite(entered_v) and np.isfinite(entered_mv)):
+            raise ValueError()
+    except ValueError:
+        if apparent_text.strip() and absolute_text.strip():
+            st.warning('Please enter valid numerical magnitudes in both fields.')
+        else:
+            st.info('Enter both magnitudes to calculate the distance.')
+    else:
+        mu = entered_v - entered_mv
+        dist_pc = 10**(mu/5+1)
+        st.latex(r'd = 10^{(\mu+5)/5}\;\mathrm{pc}')
+        left, right = st.columns(2)
+        left.metric('Distance modulus', f'{mu:.3f} mag')
+        right.metric('Distance', f'{dist_pc/1000:.2f} kpc')
+    st.caption('This calculation does not include an extinction correction.')
     st.info('**Reflect:** How does changing either magnitude affect the inferred '
             'distance? How would dust extinction affect your result?')
 
